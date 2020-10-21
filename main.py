@@ -1,8 +1,9 @@
 import gzip
 import re
-import time
 import pandas as pd
 from datetime import datetime
+import mmap
+import os
 
 deceased_dates_path = '/home/patrik/Downloads/milion/deceased_persons.gz'
 birth_dates_path = '/home/patrik/Downloads/milion/births.gz'
@@ -140,6 +141,67 @@ def main():
 
     # Decide if the entered artists could work on a song together
     print(decide_on_collaboration(artist_id_1, artist_id_2, final_dataframe))
+
+def create_artist(path):
+    final_f = open('vinf_artist.txt', 'r+')
+    artists = []
+    f = gzip.open(path, 'r')
+    for line in f:
+        str_line = str(line)
+        pattern = 'g.(.+?)>'
+        result = re.search(pattern, str_line)
+        if result:
+            artist_id = result.group(1)
+            if not check_if_string_in_file(final_f, str(artist_id)):
+                write_id = artist_id
+                write_name = get_attribute_by_id(names_path, artist_id)
+                write_birth = get_attribute_by_id(birth_dates_path, artist_id)
+                write_death = get_attribute_by_id(deceased_dates_path, artist_id)
+                if write_name != 'NotFound' and write_birth != 'NotFound':
+                    final_f.write(write_id + '; ')
+                    final_f.write(write_name + '; ')
+                    final_f.write(fix_date(write_birth) + '; ')
+                    final_f.write(fix_date(write_death) + '\n')
+    return artists
+
+
+def check_if_string_in_file(read_obj, string_to_search):
+    read_obj.seek(0, 0)
+    for line in read_obj:
+        if string_to_search in line:
+            read_obj.seek(2)
+            return True
+    return False
+
+
+def get_attribute_by_id(path, id):
+    f = gzip.open(path, 'r')
+    for line in f:
+        str_line = str(line)
+        id_pattern = '(g.'+id+')>'
+        m = re.search(id_pattern, str_line)
+        if m:
+            found = m.group(1)
+            if found == 'g.'+id:
+                n = re.search('"(.+?)"', str_line)
+                if n:
+                    found1 = n.group(0)
+                    found1 = re.sub('["]', '', found1)
+                    return found1
+    return 'NotFound'
+
+
+def fix_date(date):
+    if len(date) == 4:
+        date = date + '-01-01'
+    return date
+
+
+def main2():
+    #create_first_artist(artists_path)
+    create_artist(artists_path)
+   # get_attribute_by_id(names_path, '1239jnzr')
+
 if __name__ == "__main__":
     # execute only if run as a script
-    main()
+    main2()
