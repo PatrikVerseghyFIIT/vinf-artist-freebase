@@ -1,97 +1,29 @@
 import gzip
 import re
-import pandas as pd
-from datetime import datetime
-import mmap
-import os
+import zipfile
 
-deceased_dates_path = '/home/patrik/Downloads/milion/deceased_persons.gz'
-birth_dates_path = '/home/patrik/Downloads/milion/births.gz'
-names_path = '/home/patrik/Downloads/milion/names.gz'
-artists_path = '/home/patrik/Downloads/milion/artists.gz'
+deceased_dates_path = 'date_of_deaths.txt'
+birth_dates_path = 'date_of_births.txt'
+names_path = 'names.txt'
+zip_file_name = '/home/patrik/Downloads/freebase-100-mil.zip'
+file_name = 'freebase-head-100000000'
 
 
-def remove_duplicates_list_dictionary(list_of_dictionary):
-    seen = set()
-    new_list = []
-    for d in list_of_dictionary:
-        t = tuple(d.items())
-        if t not in seen:
-            seen.add(t)
-            new_list.append(d)
-    return new_list
+def decide_on_collaboration(artist1, artist2):
+    artist_1_name = get_attribute_by_id(names_path, artist1)
+    artist_2_name = get_attribute_by_id(names_path, artist2)
 
+    artist_1_birth = fix_date(get_attribute_by_id(birth_dates_path, artist1))
+    artist_1_death = fix_date(get_attribute_by_id(deceased_dates_path, artist1))
 
-def create_artists_data_frame(path):
-    artists = []
-    f = gzip.open(path, 'r')
-    for line in f:
-        dict = {}
-        str_line = str(line)
-        pattern = 'g.(.+?)>'
-        result = re.search(pattern, str_line)
-        if result:
-            found = result.group(1)
-            dict['id'] = found
-        artists.append(dict)
-    return artists
-
-
-def create_date_data_frame(path, name):
-    Births = []
-    f = gzip.open(path, 'r')
-    for line in f:
-        Dict = {}
-        str_line = str(line)
-        #print(str_line)
-        id_pattern = 'g.(.+?)>'
-        m = re.search(id_pattern, str_line)
-        if m:
-            found = m.group(1)
-            #print(found)
-            Dict['id'] = found
-        n = re.search('"(.+?)"', str_line)
-        if n:
-            found1 = n.group(0)
-            found1 = re.sub('["]', '', found1)
-        #    print(found1)
-            Dict[name] = found1
-        Births.append(Dict)
-    return Births
-
-
-def get_attribute_by_id(type_of_attribute, id, dataframe):
-    filter = dataframe['id'] == id
-    result_filter = dataframe[filter]
-    return result_filter.iloc[0][type_of_attribute]
-
-
-def change_date_format(date):
-    if pd.isna(date):
-        return date
-    date = str(date)
-    if len(str(date)) == 4:
-        date = date + '-01-01'
-    date = datetime.strptime(date, '%Y-%m-%d')
-    return date
-
-
-def decide_on_collaboration(artist1, artist2, dataframe):
-    artist_1_name = get_attribute_by_id('name', artist1, dataframe)
-    artist_2_name = get_attribute_by_id('name', artist2, dataframe)
-
-    artist_1_birth = get_attribute_by_id('date_of_birth', artist1, dataframe)
-    artist_1_death = get_attribute_by_id('date_of_death', artist1, dataframe)
-
-    artist_2_birth = get_attribute_by_id('date_of_birth', artist2, dataframe)
-    artist_2_death = get_attribute_by_id('date_of_death', artist2, dataframe)
+    artist_2_birth = fix_date(get_attribute_by_id(birth_dates_path, artist2))
+    artist_2_death = fix_date(get_attribute_by_id(deceased_dates_path, artist2))
 
     result = 'Artists: ' + artist_1_name + ', ' + artist_2_name + '. Dates(B/D): ' + \
              str(artist_1_birth) + '/' + str(artist_1_death) + ', ' + str(artist_2_birth) + '/' + str(artist_2_death)
 
-
     # They both live, they could work on a song
-    if pd.isna(artist_1_death) and pd.isna(artist_2_death):
+    if artist_1_death == 'NotFound' and artist_2_death == 'NotFound':
         return 'They could work on a song. ' + result
     # Second one is younger, they could work on a song
     elif artist_2_birth >= artist_1_birth and artist_2_birth <= artist_1_death:
@@ -104,86 +36,33 @@ def decide_on_collaboration(artist1, artist2, dataframe):
         return 'They could not work on a song. ' + result
 
 
-def main():
-    # Get list of dictionaries for each attribute and remove duplicates within them
-    date_of_births = create_date_data_frame(birth_dates_path, 'date_of_birth')
-    date_of_births = remove_duplicates_list_dictionary(date_of_births)
-
-    date_of_deaths = create_date_data_frame(deceased_dates_path, 'date_of_death')
-    date_of_deaths = remove_duplicates_list_dictionary(date_of_deaths)
-
-    names = create_date_data_frame(names_path, 'name')
-    names = remove_duplicates_list_dictionary(names)
-
-    artists = create_artists_data_frame(artists_path)
-    artists = remove_duplicates_list_dictionary(artists)
-
-    # Create dataframes from list of dictionaries
-    df_births = pd.DataFrame(date_of_births)
-    df_deaths = pd.DataFrame(date_of_deaths)
-    df_names = pd.DataFrame(names)
-    df_artists = pd.DataFrame(artists)
-
-    # Merging dataframes
-    result = pd.merge(df_births, df_deaths, on='id', how='left')
-    result2 = pd.merge(result, df_names, on='id')
-    final_dataframe = pd.merge(result2, df_artists, on='id')
-    final_dataframe = final_dataframe.drop_duplicates(subset=['id'], keep='first')
-    print(final_dataframe)
-
-    # Unify date formats
-    final_dataframe['date_of_birth'] = final_dataframe['date_of_birth'].apply(lambda x: change_date_format(x))
-    final_dataframe['date_of_death'] = final_dataframe['date_of_death'].apply(lambda x: change_date_format(x))
-
-    # Enter artist id
-    artist_id_1 = str(input("Enter first artist ID"))
-    artist_id_2 = str(input("Enter second artist ID"))
-
-    # Decide if the entered artists could work on a song together
-    print(decide_on_collaboration(artist_id_1, artist_id_2, final_dataframe))
-
-def create_artist(path):
-    final_f = open('vinf_artist.txt', 'r+')
-    artists = []
-    f = gzip.open(path, 'r')
-    for line in f:
-        str_line = str(line)
-        pattern = 'g.(.+?)>'
-        result = re.search(pattern, str_line)
-        if result:
-            artist_id = result.group(1)
-            if not check_if_string_in_file(final_f, str(artist_id)):
-                write_id = artist_id
-                write_name = get_attribute_by_id(names_path, artist_id)
-                write_birth = get_attribute_by_id(birth_dates_path, artist_id)
-                write_death = get_attribute_by_id(deceased_dates_path, artist_id)
-                if write_name != 'NotFound' and write_birth != 'NotFound':
+def create_artist():
+    final_f = open('final_artist.txt', 'r+')
+    f = open('vinf_artist.txt', 'r')
+    for artist_id in f:
+        if not check_if_string_in_file(final_f, str(artist_id)):
+            write_id = artist_id[:len(artist_id) - 1]
+            write_birth = get_attribute_by_id(birth_dates_path, write_id)
+            print(write_id)
+            if write_birth != 'NotFound':
+                write_name = get_attribute_by_id(names_path, write_id)
+                if write_name != 'NotFound':
+                    write_death = get_attribute_by_id(deceased_dates_path, write_id)
                     final_f.write(write_id + '; ')
                     final_f.write(write_name + '; ')
                     final_f.write(fix_date(write_birth) + '; ')
                     final_f.write(fix_date(write_death) + '\n')
-    return artists
-
-
-def check_if_string_in_file(read_obj, string_to_search):
-    read_obj.seek(0, 0)
-    for line in read_obj:
-        if string_to_search in line:
-            read_obj.seek(2)
-            return True
-    return False
 
 
 def get_attribute_by_id(path, id):
-    f = gzip.open(path, 'r')
+    f = open(path, 'r')
     for line in f:
-        str_line = str(line)
         id_pattern = '(g.'+id+')>'
-        m = re.search(id_pattern, str_line)
+        m = re.search(id_pattern, line)
         if m:
             found = m.group(1)
             if found == 'g.'+id:
-                n = re.search('"(.+?)"', str_line)
+                n = re.search('"(.+?)"', line)
                 if n:
                     found1 = n.group(0)
                     found1 = re.sub('["]', '', found1)
@@ -197,11 +76,77 @@ def fix_date(date):
     return date
 
 
-def main2():
-    #create_first_artist(artists_path)
-    create_artist(artists_path)
-   # get_attribute_by_id(names_path, '1239jnzr')
+def check_if_string_in_file(read_obj, string_to_search):
+    read_obj.seek(0, 0)
+    for line in read_obj:
+        if string_to_search in line:
+            read_obj.seek(2)
+            return True
+    return False
+
+
+def get_artist_file():
+    artists_f = open('vinf_artist.txt', 'r+')
+    with zipfile.ZipFile(zip_file_name) as myzip:
+        with myzip.open(file_name) as myfile:
+            for line in myfile:
+                str_line = str(line)
+                pattern_artist = '<http://rdf.freebase.com/ns/music.artist>'
+                result_artist = re.search(pattern_artist, str_line)
+                if result_artist:
+                    pattern_id = '<http://rdf.freebase.com/ns/g.(.+?)>'
+                    result_id = re.search(pattern_id, str_line)
+                    if result_id:
+                        artist_id = result_id.group(1)
+                        if not check_if_string_in_file(artists_f, str(artist_id)):
+                            artists_f.write(artist_id + '\n')
+    myfile.close()
+    myzip.close()
+
+
+def get_artist_name_dates():
+    date_of_births_f = open('date_of_births.txt', 'r+')
+    date_of_deaths_f = open('date_of_deaths.txt', 'r+')
+    names_f = open('names.txt', 'r+')
+
+    with zipfile.ZipFile(zip_file_name) as myzip:
+        with myzip.open(file_name) as myfile:
+            for line in myfile:
+                str_line = line.decode('utf-8')
+                pattern_name = '<http://rdf.freebase.com/ns/type.object.name>'
+                pattern_date_of_birth = '<http://rdf.freebase.com/ns/people.person.date_of_birth>'
+                pattern_date_of_death = '<http://rdf.freebase.com/ns/people.deceased_person.date_of_death>'
+                result_name = re.search(pattern_name, str_line)
+                result_date_of_birth = re.search(pattern_date_of_birth, str_line)
+                result_date_of_death = re.search(pattern_date_of_death, str_line)
+                if result_name:
+                    names_f.write(str_line + '\n')
+                if result_date_of_birth:
+                    date_of_births_f.write(fix_date(str_line) + '\n')
+                if result_date_of_death:
+                    date_of_deaths_f.write(fix_date(str_line) + '\n')
+    myfile.close()
+    myzip.close()
+    date_of_births_f.close()
+    date_of_deaths_f.close()
+    names_f.close()
+
+
+def main():
+    # get a file with only artists
+    get_artist_file()
+    # get files of names, dates of birth and dates of death
+    get_artist_name_dates()
+    # get only relevant information
+    create_artist()
+
+    # Enter IDs of both artists
+    artist_id_1 = str(input("Enter first artist ID"))
+    artist_id_2 = str(input("Enter second artist ID"))
+
+    # Decide if the entered artists could work on a song together
+    print(decide_on_collaboration(artist_id_1, artist_id_2))
+
 
 if __name__ == "__main__":
-    # execute only if run as a script
-    main2()
+    main()
