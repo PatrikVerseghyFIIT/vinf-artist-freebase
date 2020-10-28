@@ -135,7 +135,7 @@ def get_artist_name_dates():
 def main():
     # get a file which contains only artists
     get_artist_file()
-    # get files of names, dates of birth and dates of death
+    # get files of names,dates of birth and dates of death
     get_artist_name_dates()
     # get only relevant information
     create_artist()
