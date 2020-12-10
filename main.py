@@ -212,7 +212,7 @@ def search_by_name(_index, name):
     query_body = {
         "query": {
             "bool": {
-                "must": {
+                "should": {
                     "match": {
                         "name": name
                     }
@@ -225,11 +225,16 @@ def search_by_name(_index, name):
     # print("query hits:", result["hits"]["hits"])
     # print("total hits:", len(result["hits"]["hits"]))
     # print('You searched for: ')
+    print(len(result["hits"]["hits"]))
     name = result["hits"]["hits"][0]['_source']['name']
     date_of_birth = result["hits"]["hits"][0]['_source']['date_of_birth']
     date_of_death = result["hits"]["hits"][0]['_source']['date_of_death']
     print('Based on your input, we found the following artist: ')
-    print(name + '; date of birth: ' + date_of_birth + '; date of death: ' + date_of_death)
+    print('TOP:' + name + '; date of birth: ' + date_of_birth + '; date of death: ' + date_of_death)
+    searched_artists = []
+    for artist in result["hits"]["hits"]:
+        print(artist['_source'])
+        searched_artists.append(artist)
     return result["hits"]["hits"][0]['_source']
 
 
@@ -251,8 +256,6 @@ def insert_data(data: list, index='artists'):
                                      headers={"Content-Type": "application/json; charset=utf-8"})
             print(response)
             response_json = json.loads(response.content.decode('utf-8'))
-            # if response_json['error']:
-            #     raise Exception('problem')
 
             bulk_string = ''
             print('inserted {number_of_doc_in_bulk}')
@@ -264,15 +267,15 @@ def decide_on_collaboration(artist_1_birth, artist_1_death, artist_2_birth, arti
         return 'Based on our information, they both are still alive. So the could have collaborated in the past.. '
     # Second one is younger, they could work on a song
     elif artist_1_birth == 'None' or artist_2_birth == 'None':
-        return 'We cant tell.'
+        return 'We have no such information.'
     elif artist_1_birth <= artist_2_birth <= artist_1_death:
-        return 'They could collaborate. '
+        return 'They could have collaborate. '
     # Second one is older, they cold work on a song
     elif artist_2_birth <= artist_1_birth <= artist_2_death:
-        return 'They could collaborate. '
+        return 'They could have collaborate. '
     # They could not work on a song
     else:
-        return 'We have no information about them. '
+        return 'They could have not collaborate.'
 
 
 def main_elastic():
@@ -294,7 +297,7 @@ def main_elastic():
     artist_2_death = result_2['date_of_death']
 
     print(decide_on_collaboration(artist_1_birth, artist_1_death, artist_2_birth, artist_2_death))
-    statistical_analysis('VINF_final_output/input3.txt')
+    # statistical_analysis('VINF_final_output/input3.txt')
 
 
 if __name__ == "__main__":
